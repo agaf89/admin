@@ -1,12 +1,13 @@
 import React,{Component} from 'react';
 import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid';
+
 import '../../helpers/iframeLoader.js';
 import DOMhelper from '../../helpers/dom-helper';
 import EditorText from '../editor-text/editor-text';
 import UIkit from 'uikit';
 import Spinner from '../spinner/spinner'
-
+import ConfirmModal from '../confirm-modal/confirmModal'
+import ChooseModal from '../choose-modal/choose-modal'
 
 
 export default class Editor extends Component{
@@ -22,13 +23,19 @@ export default class Editor extends Component{
         this.deletePage = this.deletePage.bind(this)
         this.isLoading = this.isLoading.bind(this)
         this.isLoaded = this.isLoaded.bind(this)
+        this.save = this.save.bind(this)
+        this.init = this.init.bind(this)
     }
     
     componentDidMount(){
-        this.init(this.currentPage)
+        this.init(null, this.currentPage)
     }
 
-    init(page){
+    init(e, page){
+        if (e){
+            e.preventDefault();
+        }
+        this.isLoading()
         this.iframe = document.querySelector('iframe'); //ждем пока все загрузится
         this.open(page, this.isLoaded);
         this.loadPageList(); //с сервера получаем доступные страницы
@@ -36,7 +43,7 @@ export default class Editor extends Component{
     open(page, cb){
         this.currentPage = page;
         axios
-            .get(`../${page}`).then( res => {
+            .get(`../${page}?rnd=${Math.random()}`).then( res => {
                 return DOMhelper.parseStringtoDOM(res.data) //из сервера приходит строка, парсим ее в ДОМ
             }).then( res => DOMhelper.wrapTextNodes(res) ) //оборачиваем ноды в спциальный тег
             .then( dom => {
@@ -45,7 +52,8 @@ export default class Editor extends Component{
             })
             .then( DOMhelper.serializeDOMtoString) //не можем на сервер отправить ДОМ, поэтому отправляем строку
             .then( html => axios.post('./api/saveTempPage.php', {html})) //на сервере создаем файл с нужной структурой
-            .then( () => this.iframe.load('../temp.html')) //с помощью библиотеки ждем пока загрузится НОВЫЙ ФАЙЛ, который выше создали
+            .then( () => this.iframe.load('../dnjwk_12312_sad-43.html')) //с помощью библиотеки ждем пока загрузится НОВЫЙ ФАЙЛ, который выше создали
+            .then( ()=> axios.post('./api/deleteTempPage.php'))
             .then(() => this.enableEditing()) //включаем редактирование элементов
             .then( () => this.injectStyles())
             .then(cb)
@@ -86,7 +94,7 @@ export default class Editor extends Component{
 
 
     loadPageList(){ //получаем список файлов
-        axios.get('./api').then(e => {
+        axios.get('./api/pageList.php').then(e => {
             this.setState({pageList: e.data})
         })
     }
@@ -115,10 +123,8 @@ export default class Editor extends Component{
         })
     }
 
-
-    
     render(){
-        const {loading} = this.state;
+        const {loading, pageList} = this.state;
         const modal = true;
         let spinner;
         loading ? spinner = <Spinner active/> : spinner = <Spinner/>
@@ -127,28 +133,11 @@ export default class Editor extends Component{
                 <iframe src={this.currentPage} frameBorder='0' ></iframe>
                 {spinner}
                 <div className='panel'>
+                    <button uk-toggle="target: #modal-open" className="uk-button uk-button-primary uk-margin-small-right">Открыть</button>
                     <button uk-toggle="target: #modal-save" className="uk-button uk-button-primary">Опубликовать</button>
                 </div>
-                <div container='false' id="modal-save" uk-modal={modal.toString()}>
-                    <div className="uk-modal-dialog uk-modal-body">
-                        <h2 className="uk-modal-title">Сохранение</h2>
-                        <p>Вы действительно хотите сохранить изменения?</p>
-                        <p className="uk-text-right">
-                            <button onClick={ () => this.save()}  className="uk-button uk-button-default uk-modal-close" type="button">Отменить</button>
-                            <button
-                            className="uk-button uk-button-primary uk-modal-close" type="button"
-                            onClick={ 
-                            () => this.save(() => {
-                                UIkit.notification({message: 'Успешно сохранено', status: 'success'})
-                            },
-                            () => {
-                               UIkit.notification({message: 'Ошибка сохранения', status: 'danger'})
-                           })
-                        }
-                            >Опубликовать</button>
-                        </p>
-                    </div>
-                </div>
+                <ConfirmModal modal={modal} target={'modal-save'} method={this.save} />
+                <ChooseModal data={pageList} modal={modal} target={'modal-open'} redirect={this.init}/>
             </>
         )
     }

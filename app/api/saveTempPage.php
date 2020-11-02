@@ -1,6 +1,6 @@
 <?php
 $_POST = json_decode( file_get_contents("php://input"), true );
-$newfile = '../../temp.html';
+$newfile = '../../dnjwk_12312_sad-43.html';
 
 if ($_POST['html']){ //проверка существует ли такой файл
    file_put_contents($newfile,$_POST['html'] ); //помещаем как контент в $newfile

@@ -1,7 +1,6 @@
 <?php
-$_POST = json_decode( file_get_contents("php://input"), true );
-echo $_POST;
-$file = '../../' . $_POST['name'];
+
+$file = '../../dnjwk_12312_sad-43.html';
 
 if (file_exists($file)){ //проверка существует ли такой файл
     unlink($file); //удаляем файл
