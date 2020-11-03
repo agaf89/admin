@@ -8,23 +8,24 @@ import UIkit from 'uikit';
 import Spinner from '../spinner/spinner'
 import ConfirmModal from '../confirm-modal/confirmModal'
 import ChooseModal from '../choose-modal/choose-modal'
-
+import Panel from '../panel/panel'
+import EditorMeta from '../editor-meta/editor-meta'
 
 export default class Editor extends Component{
     constructor(){
         super();
-        this.currentPage = 'index.html';
+        this.currentPage = 'index.html'; //стартовая страница
         this.state = {
             pageList: [],
+            backupsList: [],
             newPageName: '',
             loading: true
         }
-        this.createNewPage = this.createNewPage.bind(this)
-        this.deletePage = this.deletePage.bind(this)
         this.isLoading = this.isLoading.bind(this)
         this.isLoaded = this.isLoaded.bind(this)
         this.save = this.save.bind(this)
         this.init = this.init.bind(this)
+        this.restoreBackup =this.restoreBackup.bind(this)
     }
     
     componentDidMount(){
@@ -39,6 +40,7 @@ export default class Editor extends Component{
         this.iframe = document.querySelector('iframe'); //ждем пока все загрузится
         this.open(page, this.isLoaded);
         this.loadPageList(); //с сервера получаем доступные страницы
+        this.loadBackupsList();
     }
     open(page, cb){
         this.currentPage = page;
@@ -56,17 +58,20 @@ export default class Editor extends Component{
             .then( ()=> axios.post('./api/deleteTempPage.php'))
             .then(() => this.enableEditing()) //включаем редактирование элементов
             .then( () => this.injectStyles())
-            .then(cb)
+            .then(cb);
+        this.loadBackupsList();   
     }
-    save(onSucses,onError){ //сохраняем изменения
+    async save(onSucses,onError){ //сохраняем изменения
         this.isLoading(); //спиннер
         const newDom = this.virtualDOM.cloneNode(this.virtualDOM)
         DOMhelper.unwrapTextNodes(newDom);
         const html = DOMhelper.serializeDOMtoString(newDom)
-        axios.post('./api/savePage.php', {pageName: this.currentPage, html})
-        .then(onSucses)
-        .catch(onError)
-        .finally(this.isLoaded)
+        await axios
+            .post('./api/savePage.php', {pageName: this.currentPage, html})
+            .then(onSucses)
+            .catch(onError)
+            .finally(this.isLoaded)
+        this.loadBackupsList();
     }
 
     enableEditing(){ //метод перебора всех тегов 'text-editor' и включения редактирования
@@ -98,18 +103,26 @@ export default class Editor extends Component{
             this.setState({pageList: e.data})
         })
     }
-    createNewPage(){
-        axios.post('./api/createNewPage.php', {'name': this.state.newPageName})
-        .then(this.loadPageList()).catch ( () =>  alert('Страница уже существует'));
+    loadBackupsList(){
+        axios
+        .get('./backups/backups.json')
+        .then( res => this.setState({backupsList: res.data.filter(backup => {
+            return backup.page === this.currentPage;
+        })}))
     }
-    deletePage(page){
-        const result = confirm('Вы уверены, что нужно удалить?')
-        if (result){
-            axios.post('./api/deletePage.php', {'name': page})
-            .then(this.loadPageList()).catch ( () =>  alert('Такого файла не существует'));
-        } else {
-            null
+    restoreBackup(e, backup){
+        if (e){
+            e.preventDefault();
         }
+        UIkit.modal.confirm('Вы действительно хотите восстанновить страницу из этой резервной копии? Все несохраненные данные будут потеряны!', {labels: {ok: 'Восстановить', cancel: 'Отмена' }})
+        .then(() => {
+            this.isLoading();
+            return axios
+            .post('./api/restoreBackup.php', {'page': this.currentPage, 'file': backup })
+        })
+        .then(() => {
+            this.open(this.currentPage, this.isLoaded)
+        })
     }
 
     isLoading(){
@@ -124,20 +137,21 @@ export default class Editor extends Component{
     }
 
     render(){
-        const {loading, pageList} = this.state;
+        const {loading, pageList, backupsList} = this.state;
         const modal = true;
         let spinner;
+
         loading ? spinner = <Spinner active/> : spinner = <Spinner/>
         return(
             <>  
-                <iframe src={this.currentPage} frameBorder='0' ></iframe>
+                <iframe src='' frameBorder='0' ></iframe>
                 {spinner}
-                <div className='panel'>
-                    <button uk-toggle="target: #modal-open" className="uk-button uk-button-primary uk-margin-small-right">Открыть</button>
-                    <button uk-toggle="target: #modal-save" className="uk-button uk-button-primary">Опубликовать</button>
-                </div>
+                <Panel/>
+
+                <ChooseModal data={backupsList} modal={modal} target={'modal-backup'} redirect={this.restoreBackup}/>
                 <ConfirmModal modal={modal} target={'modal-save'} method={this.save} />
                 <ChooseModal data={pageList} modal={modal} target={'modal-open'} redirect={this.init}/>
+                {this.virtualDOM ? <EditorMeta modal={modal} target={'modal-meta'} virtualDOM={this.virtualDOM}/> : false}
             </>
         )
     }
