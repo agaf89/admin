@@ -35,4 +35,16 @@ export default class DOMhelper{
             element.parentNode.replaceChild(element.firstChild, element)
         })
     }
+
+    static wrapImages(dom){//создаем атрибуты для редактируемой версии дом
+        dom.body.querySelectorAll('img').forEach( (img, i) => {
+            img.setAttribute('editableimgid', i)
+        })
+        return dom
+    }
+    static unwrapImages(dom){ //удаляем атрибуты для чистой версии дом
+        dom.body.querySelectorAll('[editableimgid]').forEach( (img) => {
+            img.removeAttribute('editableimgid')
+        })
+    }
 }

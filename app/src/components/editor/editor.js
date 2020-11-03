@@ -10,6 +10,7 @@ import ConfirmModal from '../confirm-modal/confirmModal'
 import ChooseModal from '../choose-modal/choose-modal'
 import Panel from '../panel/panel'
 import EditorMeta from '../editor-meta/editor-meta'
+import EditorImages from '../editor-images/editor-images'
 
 export default class Editor extends Component{
     constructor(){
@@ -47,7 +48,9 @@ export default class Editor extends Component{
         axios
             .get(`../${page}?rnd=${Math.random()}`).then( res => {
                 return DOMhelper.parseStringtoDOM(res.data) //из сервера приходит строка, парсим ее в ДОМ
-            }).then( res => DOMhelper.wrapTextNodes(res) ) //оборачиваем ноды в спциальный тег
+            })
+            .then( res => DOMhelper.wrapTextNodes(res) ) //оборачиваем ноды в спциальный тег
+            .then( res => DOMhelper.wrapImages(res) ) //оборачиваем ноды в спциальный тег для картинок
             .then( dom => {
                 this.virtualDOM = dom // 'чистый' дом записываем в переменную
                 return dom
@@ -61,15 +64,16 @@ export default class Editor extends Component{
             .then(cb);
         this.loadBackupsList();   
     }
-    async save(onSucses,onError){ //сохраняем изменения
+    async save(){ //сохраняем изменения для публикации
         this.isLoading(); //спиннер
         const newDom = this.virtualDOM.cloneNode(this.virtualDOM)
         DOMhelper.unwrapTextNodes(newDom);
+        DOMhelper.unwrapImages(newDom);
         const html = DOMhelper.serializeDOMtoString(newDom)
         await axios
             .post('./api/savePage.php', {pageName: this.currentPage, html})
-            .then(onSucses)
-            .catch(onError)
+            .then(()=> this.showNotifications('Успешно сохранено','success'))
+            .catch(()=> this.showNotifications('Ошибка сохранения','danger'))
             .finally(this.isLoaded)
         this.loadBackupsList();
     }
@@ -80,6 +84,13 @@ export default class Editor extends Component{
             const virtualElement = this.virtualDOM.body.querySelector(`[nodeid="${id}"]`);
 
             new EditorText(element, virtualElement)
+        })
+        //метод перебора всех тегов 'editableimgid' и включения редактирования
+        this.iframe.contentDocument.body.querySelectorAll('[editableimgid]').forEach ( element => {
+            const id = element.getAttribute('editableimgid')
+            const virtualElement = this.virtualDOM.body.querySelector(`[editableimgid="${id}"]`);
+
+            new EditorImages(element, virtualElement, this.isLoading, this.isLoaded, this.showNotifications)
         })
     }
     injectStyles(){
@@ -93,10 +104,16 @@ export default class Editor extends Component{
                 outline: 3px solid red;
                 outline-offset: 8px;
             }
+            [editableimgid]:hover{
+                outline: 3px solid orange;
+                outline-offset: 8px;
+            }
         `;
         this.iframe.contentDocument.head.appendChild(style);
     }
-
+    showNotifications(message, status){ //метод для размещения уведомлений
+        UIkit.notification({message, status})
+    }
 
     loadPageList(){ //получаем список файлов
         axios.get('./api/pageList.php').then(e => {
@@ -145,6 +162,7 @@ export default class Editor extends Component{
         return(
             <>  
                 <iframe src='' frameBorder='0' ></iframe>
+                <input style={{display: 'none'}} id='img-upload' type='file' accept='image/*'></input>
                 {spinner}
                 <Panel/>
 
